@@ -1,0 +1,19 @@
+# Render Blueprint for the NexTask API (Render dashboard -> New -> Blueprint).
+# Set MONGO_URI, JWT_SECRET and CLIENT_ORIGIN in the Render dashboard; they are
+# marked sync: false so they are never stored in this file.
+services:
+  - type: web
+    name: nextask-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_ORIGIN
+        sync: false

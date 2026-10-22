@@ -1,121 +1,107 @@
 const express = require("express");
-const router = express.Router();
+const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const protect = require("../middleware/authMiddleware");
 
-/*
-========================================
-📌 CREATE TASK (Protected)
-POST /api/tasks
-========================================
-*/
-router.post("/", protect, async (req, res) => {
-  try {
-    const task = await Task.create({
-      title: req.body.title,
-      description: req.body.description,
-      user: req.user.id, // link task to logged-in user
-    });
+const router = express.Router();
+router.use(protect); // every task route needs a logged-in user
 
-    res.status(201).json(task);
+// Only these fields can be set by the client. Previously the update route passed
+// req.body straight to the database, so a user could change a task's `user`
+// field and move it into someone else's account.
+const EDITABLE = ["title", "description", "completed", "dueDate"];
+
+function pickEditable(body = {}) {
+  const out = {};
+  for (const key of EDITABLE) {
+    if (body[key] !== undefined) out[key] = body[key];
+  }
+  if (out.dueDate === "") out.dueDate = null; // cleared date input
+  return out;
+}
+
+function sendValidationError(res, error) {
+  return res.status(400).json({ message: error.message });
+}
+
+// Finds a task owned by the current user. Invalid ids and other users' tasks
+// both return 404, so the API doesn't reveal which task ids exist.
+async function findOwnTask(req, res) {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    res.status(404).json({ message: "Task not found" });
+    return null;
+  }
+  const task = await Task.findOne({ _id: req.params.id, user: req.user.id });
+  if (!task) {
+    res.status(404).json({ message: "Task not found" });
+    return null;
+  }
+  return task;
+}
+
+// POST /api/tasks
+router.post("/", async (req, res) => {
+  try {
+    const fields = pickEditable(req.body);
+    if (!fields.title || !String(fields.title).trim()) {
+      return res.status(400).json({ message: "Title is required" });
+    }
+    const task = await Task.create({ ...fields, user: req.user.id });
+    return res.status(201).json(task);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (error.name === "ValidationError" || error.name === "CastError") return sendValidationError(res, error);
+    return res.status(500).json({ message: "Could not create task" });
   }
 });
 
-/*
-========================================
-📌 GET ALL TASKS (Protected)
-GET /api/tasks
-========================================
-*/
-router.get("/", protect, async (req, res) => {
+// GET /api/tasks  (newest first)
+router.get("/", async (req, res) => {
   try {
-    const tasks = await Task.find({ user: req.user.id });
-    res.json(tasks);
+    const tasks = await Task.find({ user: req.user.id }).sort({ createdAt: -1 });
+    return res.json(tasks);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: "Could not load tasks" });
   }
 });
 
-/*
-========================================
-📌 GET TASK BY ID (Protected)
-GET /api/tasks/:id
-========================================
-*/
-router.get("/:id", protect, async (req, res) => {
+// GET /api/tasks/:id
+router.get("/:id", async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id);
-
-    if (!task) {
-      return res.status(404).json({ message: "Task not found" });
-    }
-
-    // Check ownership
-    if (task.user.toString() !== req.user.id) {
-      return res.status(401).json({ message: "Not authorized" });
-    }
-
-    res.json(task);
+    const task = await findOwnTask(req, res);
+    if (task) return res.json(task);
+    return undefined;
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: "Could not load task" });
   }
 });
 
-/*
-========================================
-📌 UPDATE TASK (Protected)
-PUT /api/tasks/:id
-========================================
-*/
-router.put("/:id", protect, async (req, res) => {
+// PUT /api/tasks/:id
+router.put("/:id", async (req, res) => {
   try {
-    let task = await Task.findById(req.params.id);
-
-    if (!task) {
-      return res.status(404).json({ message: "Task not found" });
+    const task = await findOwnTask(req, res);
+    if (!task) return undefined;
+    const fields = pickEditable(req.body);
+    if ("title" in fields && !String(fields.title).trim()) {
+      return res.status(400).json({ message: "Title cannot be empty" });
     }
-
-    if (task.user.toString() !== req.user.id) {
-      return res.status(401).json({ message: "Not authorized" });
-    }
-
-    task = await Task.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-
-    res.json(task);
+    Object.assign(task, fields);
+    await task.save(); // runs schema validation, unlike findByIdAndUpdate
+    return res.json(task);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (error.name === "ValidationError" || error.name === "CastError") return sendValidationError(res, error);
+    return res.status(500).json({ message: "Could not update task" });
   }
 });
 
-/*
-========================================
-📌 DELETE TASK (Protected)
-DELETE /api/tasks/:id
-========================================
-*/
-router.delete("/:id", protect, async (req, res) => {
+// DELETE /api/tasks/:id
+router.delete("/:id", async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id);
-
-    if (!task) {
-      return res.status(404).json({ message: "Task not found" });
-    }
-
-    if (task.user.toString() !== req.user.id) {
-      return res.status(401).json({ message: "Not authorized" });
-    }
-
+    const task = await findOwnTask(req, res);
+    if (!task) return undefined;
     await task.deleteOne();
-
-    res.json({ message: "Task deleted successfully" });
+    return res.json({ message: "Task deleted" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: "Could not delete task" });
   }
 });
 

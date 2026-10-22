@@ -1,64 +1,28 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const taskRoutes = require("./routes/taskRoutes");
-const authRoutes = require("./routes/authRoutes");
 require("dotenv").config();
-
-// 🔥 Fix DNS issue (important for your case)
 const dns = require("dns");
+const mongoose = require("mongoose");
+const app = require("./app");
+
+// Prefer IPv4 when resolving the Atlas hostname (fixes connection errors on some networks).
 dns.setDefaultResultOrder("ipv4first");
 
-const app = express();
-
-// Middleware
-app.use(express.json());
-app.use(cors());
-app.use("/api/tasks", taskRoutes);
-app.use("/api/auth", authRoutes);
-
-// 🔥 MongoDB Connection
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-
-    console.log("✅ MongoDB Connected Successfully");
-  } catch (error) {
-    console.error("❌ MongoDB Connection Failed:");
-    console.error(error.message);
+for (const key of ["MONGO_URI", "JWT_SECRET"]) {
+  if (!process.env[key]) {
+    console.error(`Missing ${key}. Copy server/.env.example to server/.env and fill it in.`);
     process.exit(1);
   }
-};
+}
 
-// Call DB connection
-connectDB();
+// Render (and most hosts) tell the app which port to use.
+const PORT = process.env.PORT || 5000;
 
-// Test route
-app.get("/", (req, res) => {
-  res.send("🚀 Server is running");
-});
-
-// DB test route
-app.get("/test-db", async (req, res) => {
-  try {
-    const collections = await mongoose.connection.db
-      .listCollections()
-      .toArray();
-
-    res.json({
-      message: "✅ DB is working",
-      collections: collections.map((c) => c.name),
-    });
-  } catch (err) {
-    res.status(500).json({
-      message: "❌ DB error",
-      error: err.message,
-    });
-  }
-});
-
-// Start server
-const PORT = 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("MongoDB connected");
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  })
+  .catch((error) => {
+    console.error("MongoDB connection failed:", error.message);
+    process.exit(1);
+  });

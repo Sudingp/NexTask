@@ -1,10 +1,12 @@
 {
-  "name": "server",
+  "name": "nextask-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "NexTask REST API: Express, MongoDB, JWT auth",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "jest --runInBand"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +19,15 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.4.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node"
   }
 }

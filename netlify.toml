@@ -1,0 +1,13 @@
+# Netlify settings for the React frontend.
+[build]
+  command = "npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Send every path to index.html so refreshing /dashboard doesn't 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
